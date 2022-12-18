@@ -28,8 +28,7 @@ HRESULT Plugin::Init()
 HRESULT Plugin::OnOpen(HANDLE handle, LPCWSTR filepath)
 {
 	Plugin* pThis = reinterpret_cast<Plugin*>(handle);
-	pThis->HandleFileChange(filepath);
-	return S_OK;
+	return pThis->HandleFileChange(filepath);
 }
 
 HRESULT Plugin::OnSave(HANDLE handle, LPCWSTR filepath)
@@ -40,9 +39,7 @@ HRESULT Plugin::OnSave(HANDLE handle, LPCWSTR filepath)
 HRESULT Plugin::OnSaveAs(HANDLE handle, LPCWSTR filepath)
 {
 	Plugin* pThis = reinterpret_cast<Plugin*>(handle);
-	pThis->HandleFileChange(filepath);
-
-	return S_OK;
+	return pThis->HandleFileChange(filepath);
 }
 
 HRESULT Plugin::OnLoadCompleted(HANDLE handle)
@@ -51,7 +48,7 @@ HRESULT Plugin::OnLoadCompleted(HANDLE handle)
 	return pThis->Init();
 }
 
-void Plugin::HandleFileChange(LPCWSTR filepath)
+HRESULT Plugin::HandleFileChange(LPCWSTR filepath)
 {
 	std::filesystem::path path;
 	path.assign(filepath);
@@ -69,7 +66,7 @@ void Plugin::HandleFileChange(LPCWSTR filepath)
 	}
 	if (!valid)
 	{
-		return;
+		return S_FALSE;
 	}
 	m_callbacks.pfnRecommendEditMode(this, ColumnMode::EDIT_MODE::TextMode);
 	int response = MessageBox(NULL, L"Would you like to preview this file?", PLUGIN_NAME, MB_YESNO | MB_ICONQUESTION);
@@ -77,6 +74,7 @@ void Plugin::HandleFileChange(LPCWSTR filepath)
 	if (response == IDYES)
 	{
 		m_pShaderToyWindow->SetActiveFilepath(path);
-		m_pShaderToyWindow->Show();
+		if (!m_pShaderToyWindow->Show()) { return E_FAIL; }
 	}
+	return S_OK;
 }

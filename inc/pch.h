@@ -11,12 +11,19 @@ using namespace ::Microsoft::WRL;
 //c runtime headers
 #include <filesystem>
 
+//STL
+#include <array>
+
 
 //DirectX
-
+#include <d3d12.h>
+#include <dxgi1_6.h>
+#include <D3Dcompiler.h>
+#include <DirectXMath.h>
+#include "directx/d3dx12.h"
 
 #include "ColumnModePluginAPI.h"
-
+#include "Renderer.h"
 #include "ShaderToyWindow.h"
 #include "Plugin.h"
 
@@ -33,3 +40,9 @@ inline void VerifyBool(bool b)
 	if (!b)
 		__debugbreak();
 }
+
+// if result == false, display an error message and then return false. Intended to provide info for why we bailed from a function
+#define MESSAGE_RETURN_FALSE(result, msg) if(!result) { MessageBox(0, msg, L"Error", MB_OK); return false; }
+//if(FAILED(hr)) { /*display msg then return false*/ }
+#define BAIL_ON_FAIL(hr, msg) MESSAGE_RETURN_FALSE(SUCCEEDED(hr), msg)
+#define SILENT_RETURN_FALSE(result) if(!result) {return false;}

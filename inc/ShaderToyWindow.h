@@ -18,8 +18,9 @@ namespace CM_HlslShaderToy
 		LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
 	protected:
-		void EnsureWindowCreated();
-		void UpdateWindowTitle();
+		bool EnsureWindowCreated();
+		void UpdateWindowTitle(std::wstring message = L"");
+		void OnResize(UINT width, UINT height);
 
 	private:
 		Plugin* m_plugin;
@@ -27,5 +28,6 @@ namespace CM_HlslShaderToy
 		std::optional<HWND> m_hwnd;
 		std::filesystem::path m_path;
 		bool isNewFile = false;
+		std::unique_ptr<Renderer> m_pRenderer;
 	};
 }

@@ -18,6 +18,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 ShaderToyWindow::ShaderToyWindow(Plugin* plugin) : m_plugin(plugin)
 {
     m_path.clear();
+    m_pRenderer = std::make_unique<Renderer>(this);
 }
 
 ShaderToyWindow::~ShaderToyWindow()
@@ -40,6 +41,7 @@ HRESULT ShaderToyWindow::Init()
     {
         return E_FAIL;
     }
+
     return S_OK;
 }
 
@@ -52,7 +54,7 @@ void ShaderToyWindow::SetActiveFilepath(std::filesystem::path path)
 
 bool ShaderToyWindow::Show()
 {
-    EnsureWindowCreated();
+    SILENT_RETURN_FALSE(EnsureWindowCreated());
     UpdateWindowTitle();
     if (!IsWindowVisible(m_hwnd.value()))
     {
@@ -61,7 +63,7 @@ bool ShaderToyWindow::Show()
     return true;
 }
 
-void ShaderToyWindow::EnsureWindowCreated()
+bool ShaderToyWindow::EnsureWindowCreated()
 {
     if (!m_hwnd.has_value())
     {
@@ -78,7 +80,17 @@ void ShaderToyWindow::EnsureWindowCreated()
             m_hwnd.emplace(std::move(hwnd));
             SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)this);
         }
+
+        if (!m_pRenderer->Init())
+        {
+            MessageBox(0, L"Failed to initialize direct3d 12",
+                L"Error", MB_OK);
+            m_pRenderer->Cleanup();
+            return false;
+        }
+        MessageBox(0, L"D3D12 initialized!", L"Booyah", MB_OK);
     }
+    return true;
 }
 
 bool ShaderToyWindow::ShaderToyWindow::TryGetHwnd(_Out_ HWND& pHwnd)
@@ -92,15 +104,24 @@ bool ShaderToyWindow::ShaderToyWindow::TryGetHwnd(_Out_ HWND& pHwnd)
     return false;
 }
 
-void ShaderToyWindow::UpdateWindowTitle()
+void ShaderToyWindow::UpdateWindowTitle(std::wstring message)
 {
     if (m_hwnd.has_value() && !m_path.empty())
     {
         std::wstring windowTitle = PLUGIN_NAME;
         windowTitle.append(L" - ")
             .append(m_path.filename());
+        if (message.size() > 0) {
+            windowTitle.append(L" | ")
+                .append(message);
+        }
         SetWindowText(m_hwnd.value(), windowTitle.c_str());
     }
+}
+
+void ShaderToyWindow::OnResize(UINT width, UINT height)
+{
+
 }
 
 LRESULT CALLBACK ShaderToyWindow::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -120,6 +141,9 @@ LRESULT CALLBACK ShaderToyWindow::WndProc(HWND hWnd, UINT message, WPARAM wParam
         
         break;
     case WM_SIZE:
+        UINT width = LOWORD(lParam);
+        UINT height = HIWORD(lParam);
+        OnResize(width, height);
         return 0;
     }
 

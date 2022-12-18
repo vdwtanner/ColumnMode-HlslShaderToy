@@ -16,7 +16,7 @@ namespace CM_HlslShaderToy
 		static HRESULT APIENTRY OnLoadCompleted(HANDLE);
 
 	protected:
-		void HandleFileChange(LPCWSTR);
+		HRESULT HandleFileChange(LPCWSTR);
 
 	public:
 		ColumnMode::ColumnModeCallbacks m_callbacks;
