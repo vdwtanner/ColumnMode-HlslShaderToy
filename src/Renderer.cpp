@@ -37,6 +37,7 @@ bool Renderer::Init()
 	SILENT_RETURN_FALSE(CreateCommandList());
 	SILENT_RETURN_FALSE(CreateFences());
 
+	m_isInitialized = true;
 	return true;
 }
 
@@ -129,7 +130,7 @@ bool Renderer::CreateRTVs()
 	BAIL_ON_FAIL(m_pDevice->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_pRtvDescHeap)),
 		L"Failed to create RTV descriptor heap");
 
-	UINT rtvDescSize = m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+	m_rtvDescSize = m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvDescHandle(m_pRtvDescHeap->GetCPUDescriptorHandleForHeapStart());
 
 	for (int i = 0; i < m_frameBufferCount; i++)
@@ -143,7 +144,7 @@ bool Renderer::CreateRTVs()
 			nullptr, // Not using subresources, so can pass nullptr here
 			rtvDescHandle); // Offset for each desc
 
-		rtvDescHandle.Offset(1, rtvDescSize); //Offset isn't a pure function and actually mutates the desc handle to the offset value :(
+		rtvDescHandle.Offset(1, m_rtvDescSize); //Offset isn't a pure function and actually mutates the desc handle to the offset value :(
 	}
 
 	return true;
@@ -177,6 +178,7 @@ bool Renderer::CreateFences()
 	for (int i = 0; i < m_frameBufferCount; i++)
 	{
 		BAIL_ON_FAIL(m_pDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_pFences[i])), L"Failed to create fence");
+		m_fenceValues[i] = 0;
 	}
 
 	// single thread, so only need one fence event
@@ -192,26 +194,119 @@ bool Renderer::CreateFences()
 
 void Renderer::Update()
 {
-}
+	//TODO: Draw the ShaderToy quad
 
-void Renderer::UpdatePipeline()
-{
+	//TODO: UI elements? especially since we don't get GDI bc d3d12
 }
 
 void Renderer::Render()
 {
+	// get the new frame index from the swap chain
+	m_frameIndex = m_pSwapChain->GetCurrentBackBufferIndex();
+
+	UpdatePipeline();
+
+	// "Build" an array of command lists sorted in the order we want to render
+	ID3D12CommandList* ppCommandLists[] = { m_pCommandList.Get() };
+	m_pCommandQueue->ExecuteCommandLists(1, ppCommandLists);
+
+	VerifyHR(m_pCommandQueue->Signal(m_pFences[m_frameIndex].Get(), m_fenceValues[m_frameIndex]));
+	//Present current backbuffer
+	VerifyHR(m_pSwapChain->Present(0, 0));
 }
+
+void Renderer::UpdatePipeline()
+{
+	// Let the GPU finish doing work with this frame's commandAllocator before we reset it
+	WaitForPreviousFrame();
+
+	VerifyHR(m_pCommandAllocators[m_frameIndex]->Reset());
+
+	// now we need to make sure that the commandList is reset and using the current allocator
+	VerifyHR(m_pCommandList->Reset(m_pCommandAllocators[m_frameIndex].Get(), nullptr /*TODO: use a real PSO*/));
+
+	// Transition our RTVs, and clear the new RTV
+
+	// the "frameIndex" RTV needs to go from Present state to Render Target state so we can draw to it
+	auto t1 = CD3DX12_RESOURCE_BARRIER::Transition(
+		m_pRenderTargets[m_frameIndex].Get(),
+		D3D12_RESOURCE_STATE_PRESENT,
+		D3D12_RESOURCE_STATE_RENDER_TARGET);
+	m_pCommandList->ResourceBarrier(1, &t1);
+
+	//Get our descriptor handle again so we can update the OM
+	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_pRtvDescHeap->GetCPUDescriptorHandleForHeapStart(), m_frameIndex, m_rtvDescSize);
+
+	m_pCommandList->OMSetRenderTargets(1, &rtvHandle, false, nullptr /*TODO: depthStencil for doing UI things? Or never depthStencil and do painters alg?*/);
+	const float clearColor[] = {0.0f, .2f, .8f, 1.0f};
+	m_pCommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr); // Can clear a subsection of the RTV by passing rects here. Maybe usefull for only doing the preview in a rect and doing UI elsewhere.
+
+	// Now transition back to present so we can show off the goods
+	auto t2 = CD3DX12_RESOURCE_BARRIER::Transition(
+		m_pRenderTargets[m_frameIndex].Get(),
+		D3D12_RESOURCE_STATE_RENDER_TARGET,
+		D3D12_RESOURCE_STATE_PRESENT);
+	m_pCommandList->ResourceBarrier(1, &t2);
+
+	VerifyHR(m_pCommandList->Close());
+}
+
+
 
 void Renderer::Cleanup()
 {
+	m_isInitialized = false;
+	//Wait for all outstanding GPU work before shutdown
+	for (int i = 0; i < m_frameBufferCount; i++)
+	{
+		m_frameIndex = i;
+		WaitForPreviousFrame();
+	}
+
+	if (m_pSwapChain != nullptr)
+	{
+		//Exit fullscreen if needed before exit
+		BOOL fs = false;
+		VerifyHR(m_pSwapChain->GetFullscreenState(&fs, nullptr));
+		if (fs)
+		{
+			VerifyHR(m_pSwapChain->SetFullscreenState(false, nullptr));
+		}
+	}
+	
+	// Reset ComPtrs
+	m_pCommandList.Reset();
+	for (int i = 0; i < m_frameBufferCount; i++)
+	{
+		m_pFences[i].Reset();
+		m_pCommandAllocators[i].Reset();
+		m_pRenderTargets[i].Reset();
+	}
+	m_pRtvDescHeap.Reset();
+	m_pCommandQueue.Reset();
+	m_pSwapChain.Reset();
+	m_pDevice.Reset();
 }
 
 void Renderer::WaitForPreviousFrame()
 {
+	// Check the current fence value. If it is less than the expected value, the GPU is still executing work
+	// on the command queue since it hasn't hit the signal() yet.
+	if (m_pFences[m_frameIndex]->GetCompletedValue() < m_fenceValues[m_frameIndex])
+	{
+		// Tell the fence to notify us once the value is m_fenceValues[m_fenceIndex]
+		VerifyHR(m_pFences[m_frameIndex]->SetEventOnCompletion(m_fenceValues[m_frameIndex], m_fenceEvent));
+
+		// Idle until we get the signal to continue
+		WaitForSingleObject(m_fenceEvent, INFINITE);
+	}
+
+	//increment the fence value for the next frame
+	m_fenceValues[m_frameIndex]++;
 }
 
 Renderer::~Renderer()
 {
-	WaitForPreviousFrame();
+	Cleanup();
 	CloseHandle(m_fenceEvent);
 }

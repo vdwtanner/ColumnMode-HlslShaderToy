@@ -135,10 +135,14 @@ LRESULT CALLBACK ShaderToyWindow::WndProc(HWND hWnd, UINT message, WPARAM wParam
     {
     case WM_DESTROY:
         m_hwnd.reset();
+        m_pRenderer->Cleanup();
         break;
     
     case WM_PAINT:
-        
+        if (m_pRenderer->IsInitialized())
+        {
+            m_pRenderer->Render();
+        }
         break;
     case WM_SIZE:
         UINT width = LOWORD(lParam);

@@ -9,19 +9,25 @@ namespace CM_HlslShaderToy
 		Renderer(_In_ ShaderToyWindow* pShaderToyWindow);
 		bool Init();
 		void Update();
-		void UpdatePipeline();
+		
 		void Render();
 		void Cleanup();
 		void WaitForPreviousFrame();
 
+		bool IsInitialized() { return m_isInitialized; }
+
 		~Renderer();
 
 	private:
+		//init
 		bool CreateDevice();
 		bool CreateSwapChain();
 		bool CreateRTVs();
 		bool CreateCommandList();
 		bool CreateFences();
+
+		//Render
+		void UpdatePipeline();
 
 	private: // Owned members
 		static const int m_frameBufferCount = 3;
@@ -42,6 +48,8 @@ namespace CM_HlslShaderToy
 
 		UINT m_width = 800;
 		UINT m_height = 600;
+
+		bool m_isInitialized = false;
 
 	private: // handles to pointers owned elsewhere
 		ShaderToyWindow* h_pShaderToyWindow;
