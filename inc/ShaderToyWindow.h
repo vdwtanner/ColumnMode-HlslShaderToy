@@ -14,6 +14,8 @@ namespace CM_HlslShaderToy
 		
 		bool TryGetHwnd(_Out_ HWND& pHwnd);
 
+		void RenderLoop();
+
 	public:
 		LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
@@ -29,5 +31,9 @@ namespace CM_HlslShaderToy
 		std::filesystem::path m_path;
 		bool isNewFile = false;
 		std::unique_ptr<Renderer> m_pRenderer;
+		std::thread* m_pRenderThread;
+		std::mutex m_renderMutex;
+
+		bool m_shutdownRequested = false;
 	};
 }

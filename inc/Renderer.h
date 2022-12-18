@@ -51,6 +51,10 @@ namespace CM_HlslShaderToy
 
 		bool m_isInitialized = false;
 
+		// temporary way of checking that render thread is working correctly
+		bool increasing = true;
+		float blue = 0.0f;
+
 	private: // handles to pointers owned elsewhere
 		ShaderToyWindow* h_pShaderToyWindow;
 	};

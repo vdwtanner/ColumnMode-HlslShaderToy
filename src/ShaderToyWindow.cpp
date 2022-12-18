@@ -23,6 +23,11 @@ ShaderToyWindow::ShaderToyWindow(Plugin* plugin) : m_plugin(plugin)
 
 ShaderToyWindow::~ShaderToyWindow()
 {
+    m_shutdownRequested = true;
+    if (m_pRenderThread != nullptr)
+    {
+        m_pRenderThread->join();
+    }
     if (m_hwnd.has_value())
     {
         CloseWindow(m_hwnd.value());
@@ -88,7 +93,9 @@ bool ShaderToyWindow::EnsureWindowCreated()
             m_pRenderer->Cleanup();
             return false;
         }
-        MessageBox(0, L"D3D12 initialized!", L"Booyah", MB_OK);
+
+        //Spin up a render thread
+        m_pRenderThread = new std::thread([](ShaderToyWindow& stw) { stw.RenderLoop(); }, std::ref(*this));
     }
     return true;
 }
@@ -102,6 +109,16 @@ bool ShaderToyWindow::ShaderToyWindow::TryGetHwnd(_Out_ HWND& pHwnd)
         return true;
     }
     return false;
+}
+
+void ShaderToyWindow::RenderLoop()
+{
+    while (!m_shutdownRequested)
+    {
+        // Take the mutex so there are no interuptions while we render this frame
+        std::lock_guard<std::mutex> renderLock(m_renderMutex);
+        m_pRenderer->Render();
+    }
 }
 
 void ShaderToyWindow::UpdateWindowTitle(std::wstring message)
@@ -139,10 +156,6 @@ LRESULT CALLBACK ShaderToyWindow::WndProc(HWND hWnd, UINT message, WPARAM wParam
         break;
     
     case WM_PAINT:
-        if (m_pRenderer->IsInitialized())
-        {
-            m_pRenderer->Render();
-        }
         break;
     case WM_SIZE:
         UINT width = LOWORD(lParam);

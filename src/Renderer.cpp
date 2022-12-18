@@ -238,7 +238,27 @@ void Renderer::UpdatePipeline()
 	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_pRtvDescHeap->GetCPUDescriptorHandleForHeapStart(), m_frameIndex, m_rtvDescSize);
 
 	m_pCommandList->OMSetRenderTargets(1, &rtvHandle, false, nullptr /*TODO: depthStencil for doing UI things? Or never depthStencil and do painters alg?*/);
-	const float clearColor[] = {0.0f, .2f, .8f, 1.0f};
+
+	// Testing if render thread works
+	if (increasing)
+	{
+		blue += .005f;
+		if (blue >= 1.0f)
+		{
+			blue = 1.0f;
+			increasing = false;
+		}
+	}
+	else
+	{
+		blue -= .005f;
+		if (blue <= 0)
+		{
+			blue = 0.0f;
+			increasing = true;
+		}
+	}
+	const float clearColor[] = {0.0f, .2f, blue, 1.0f};
 	m_pCommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr); // Can clear a subsection of the RTV by passing rects here. Maybe usefull for only doing the preview in a rect and doing UI elsewhere.
 
 	// Now transition back to present so we can show off the goods
