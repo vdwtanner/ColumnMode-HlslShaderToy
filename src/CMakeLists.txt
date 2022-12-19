@@ -6,7 +6,7 @@ file(GLOB SRC CONFIGURE_DEPENDS *.cpp)
 file(GLOB INC ../inc/*.h ../inc/*.hpp ../interface/*.h)
 file(GLOB INL ../inc/*.inl *.inl)
 
-add_library (CM_HlslShaderToy SHARED ${SRC} ${INC} ${INL} CM_HlslShaderToy.def "ShaderToyWindow.cpp")
+add_library (CM_HlslShaderToy SHARED ${SRC} ${INC} ${INL} CM_HlslShaderToy.def)
 
 FetchContent_Declare(
     d3dx12
@@ -16,6 +16,9 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(d3dx12)
 
 target_link_libraries(CM_HlslShaderToy DirectX-Headers)
+
+add_dependencies(CM_HlslShaderToy BuiltInShaders)
+target_link_libraries(CM_HlslShaderToy BuiltInShaders)
 
 target_include_directories(CM_HlslShaderToy
     PRIVATE ../inc

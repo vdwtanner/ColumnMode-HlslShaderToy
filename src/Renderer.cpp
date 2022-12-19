@@ -1,4 +1,6 @@
 #include "pch.h"
+#include "VS_ScreenSpacePassthrough.h"
+#include "PS_Magenta.h"
 
 using namespace CM_HlslShaderToy;
 
