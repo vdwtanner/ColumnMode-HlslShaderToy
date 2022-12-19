@@ -38,6 +38,7 @@ bool Renderer::Init()
 	SILENT_RETURN_FALSE(CreateRTVs());
 	SILENT_RETURN_FALSE(CreateCommandList());
 	SILENT_RETURN_FALSE(CreateFences());
+	SILENT_RETURN_FALSE(PrepareShaderPreviewResources());
 
 	m_isInitialized = true;
 	return true;
@@ -100,7 +101,7 @@ bool Renderer::CreateSwapChain()
 	swapChainDesc.BufferCount = m_frameBufferCount;
 	swapChainDesc.Width = m_width; // Can pass 0 to use the output window dimensions and later fetch via IDXGISwapChain1::GetDesc1
 	swapChainDesc.Height = m_height;
-	swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	swapChainDesc.Format = m_rtvFormat;
 	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT; // pipeline will render to this swapchain
 	swapChainDesc.SampleDesc = sampleDesc;
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
@@ -194,6 +195,138 @@ bool Renderer::CreateFences()
 	return true;
 }
 
+bool Renderer::PrepareShaderPreviewResources()
+{
+	assert(m_pDevice != nullptr);
+	assert(m_pCommandList != nullptr);
+	assert(m_pCommandQueue != nullptr);
+	//TODO - refactor preview viewport rendering to another class
+
+	// First create RootSig
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc;
+	rootSigDesc.Init(0, nullptr, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+	ComPtr<ID3DBlob> signature;
+	BAIL_ON_FAIL(D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, nullptr), L"Failed to serialize RootSignature");
+	BAIL_ON_FAIL(m_pDevice->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&m_pRootSig)), L"Failed to create RootSignature");
+
+	//Vertex Shader loaded from BuiltIn
+	D3D12_SHADER_BYTECODE vsByteCode = {};
+	vsByteCode.BytecodeLength = sizeof(g_VS_ScreenSpacePassthrough);
+	vsByteCode.pShaderBytecode = g_VS_ScreenSpacePassthrough;
+
+	//TODO: Pixel Shader loaded from plugin provided by user
+	D3D12_SHADER_BYTECODE psByteCode = {};
+	psByteCode.BytecodeLength = sizeof(g_PS_Magenta);
+	psByteCode.pShaderBytecode = g_PS_Magenta;
+
+	//Create Input Layout
+	D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
+	{
+		{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0}
+	};
+	D3D12_INPUT_LAYOUT_DESC inputLayoutDesc = {};
+	inputLayoutDesc.NumElements = 1;
+	inputLayoutDesc.pInputElementDescs = inputElementDescs;
+
+	//Create PSO
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+	psoDesc.InputLayout = inputLayoutDesc;
+	psoDesc.pRootSignature = m_pRootSig.Get();
+	psoDesc.VS = vsByteCode;
+	psoDesc.PS = psByteCode;
+	psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	psoDesc.NumRenderTargets = 1;
+	psoDesc.RTVFormats[0] = m_rtvFormat;
+	psoDesc.SampleDesc = { 1 /*count*/,0 /*quality*/};
+	psoDesc.SampleMask = 0xffffffff; // point sample
+	psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+
+	BAIL_ON_FAIL(m_pDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pPSO)), L"Failed to create PSO");
+
+	// Create VertexBuffer
+
+	Vertex verts[] /*= {
+		{{ -1.0f, -1.0f, .5f}},
+		{{ 1.0f, -1.0f, .5f}},
+		{{ -1.0f, 1.0f, .5f}}
+	};*/
+		= {
+		{ { 0.0f, 0.5f, 0.5f } },
+		{ { 0.5f, -0.5f, 0.5f } },
+		{ { -0.5f, -0.5f, 0.5f } },
+	};
+	size_t vertsSize = sizeof(verts);
+
+	//Create the default heap in the copy dest state so that we can push some data into it
+	auto heapProps = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+	auto bufferResDesc = CD3DX12_RESOURCE_DESC::Buffer(vertsSize);
+	BAIL_ON_FAIL(m_pDevice->CreateCommittedResource(
+		&heapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&bufferResDesc,
+		D3D12_RESOURCE_STATE_COPY_DEST,
+		nullptr,
+		IID_PPV_ARGS(&m_pVertexBuffer)),
+		L"Failed to create default heap for VertexBuffer");
+	m_pVertexBuffer->SetName(L"VertexBuffer Resource Heap");
+
+	//now make the upload heap
+	ComPtr<ID3D12Resource> pUploadHeap;
+	heapProps = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+	BAIL_ON_FAIL(m_pDevice->CreateCommittedResource(
+		&heapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&bufferResDesc,
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&pUploadHeap)),
+		L"Failed to create VertexBuffer UploadHeap");
+	pUploadHeap->SetName(L"VertexBuffer upload heap");
+
+	// store verts in upload heap
+	D3D12_SUBRESOURCE_DATA vertData = {};
+	vertData.pData = reinterpret_cast<BYTE*>(verts);
+	vertData.RowPitch = vertsSize;
+	vertData.SlicePitch = vertsSize;
+
+	//upload
+	VerifyHR(m_pCommandList->Reset(m_pCommandAllocators[m_frameIndex].Get(), m_pPSO.Get()));
+	UpdateSubresources(m_pCommandList.Get(), m_pVertexBuffer.Get(), pUploadHeap.Get(), 0, 0, 1, &vertData);
+	auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(m_pVertexBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+	m_pCommandList->ResourceBarrier(1, &barrier);
+	m_pCommandList->Close();
+	ID3D12CommandList* ppCommandLists[] = { m_pCommandList.Get() };
+	m_pCommandQueue->ExecuteCommandLists(1, ppCommandLists);
+	m_fenceValues[m_frameIndex]++; // increment fence value so that we can guarentee that the buffer is uploaded when we start drawing
+	BAIL_ON_FAIL(m_pCommandQueue->Signal(m_pFences[m_frameIndex].Get(), m_fenceValues[m_frameIndex]), L"Failed to place fence signal on command queue");
+
+	//Create vert buffer view for verts. 
+	m_vertexBufferView.BufferLocation = m_pVertexBuffer->GetGPUVirtualAddress();
+	m_vertexBufferView.StrideInBytes = sizeof(Vertex);
+	m_vertexBufferView.SizeInBytes = vertsSize;
+
+	//Viewport
+	m_viewport.TopLeftX = 0;
+	m_viewport.TopLeftY = 0;
+	m_viewport.Width = m_width;
+	m_viewport.Height = m_height;
+	m_viewport.MinDepth = 0.0f;
+	m_viewport.MaxDepth = 1.0f;
+
+	//scissor rect
+	m_scissorRect.left = 0;
+	m_scissorRect.top = 0;
+	m_scissorRect.right = m_width;
+	m_scissorRect.bottom = m_height;
+
+	//Wait for upload to complete before freeing upload heap
+	WaitForPreviousFrame(false);
+
+	return true;
+}
+
 void Renderer::Update()
 {
 	//TODO: Draw the ShaderToy quad
@@ -225,7 +358,7 @@ void Renderer::UpdatePipeline()
 	VerifyHR(m_pCommandAllocators[m_frameIndex]->Reset());
 
 	// now we need to make sure that the commandList is reset and using the current allocator
-	VerifyHR(m_pCommandList->Reset(m_pCommandAllocators[m_frameIndex].Get(), nullptr /*TODO: use a real PSO*/));
+	VerifyHR(m_pCommandList->Reset(m_pCommandAllocators[m_frameIndex].Get(), m_pPSO.Get()));
 
 	// Transition our RTVs, and clear the new RTV
 
@@ -241,27 +374,18 @@ void Renderer::UpdatePipeline()
 
 	m_pCommandList->OMSetRenderTargets(1, &rtvHandle, false, nullptr /*TODO: depthStencil for doing UI things? Or never depthStencil and do painters alg?*/);
 
-	// Testing if render thread works
-	if (increasing)
-	{
-		blue += .005f;
-		if (blue >= 1.0f)
-		{
-			blue = 1.0f;
-			increasing = false;
-		}
-	}
-	else
-	{
-		blue -= .005f;
-		if (blue <= 0)
-		{
-			blue = 0.0f;
-			increasing = true;
-		}
-	}
-	const float clearColor[] = {0.0f, .2f, blue, 1.0f};
+
+	const float clearColor[] = {0.0f, .2f, .8f, 1.0f};
 	m_pCommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr); // Can clear a subsection of the RTV by passing rects here. Maybe usefull for only doing the preview in a rect and doing UI elsewhere.
+
+	//After Clearing we can draw
+	//m_pCommandList->SetPipelineState(m_pPSO.Get()); // don't need to do this since we set it as the initial PSO when resetting
+	m_pCommandList->SetGraphicsRootSignature(m_pRootSig.Get());
+	m_pCommandList->RSSetViewports(1, &m_viewport);
+	m_pCommandList->RSSetScissorRects(1, &m_scissorRect);
+	m_pCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	m_pCommandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
+	m_pCommandList->DrawInstanced(3, 1, 0, 0);
 
 	// Now transition back to present so we can show off the goods
 	auto t2 = CD3DX12_RESOURCE_BARRIER::Transition(
@@ -310,7 +434,7 @@ void Renderer::Cleanup()
 	m_pDevice.Reset();
 }
 
-void Renderer::WaitForPreviousFrame()
+void Renderer::WaitForPreviousFrame(bool incrementFenceValue)
 {
 	// Check the current fence value. If it is less than the expected value, the GPU is still executing work
 	// on the command queue since it hasn't hit the signal() yet.
@@ -323,8 +447,11 @@ void Renderer::WaitForPreviousFrame()
 		WaitForSingleObject(m_fenceEvent, INFINITE);
 	}
 
-	//increment the fence value for the next frame
-	m_fenceValues[m_frameIndex]++;
+	if (incrementFenceValue)
+	{
+		//increment the fence value for the next frame
+		m_fenceValues[m_frameIndex]++;
+	}
 }
 
 Renderer::~Renderer()

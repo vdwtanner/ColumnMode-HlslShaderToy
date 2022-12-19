@@ -2,6 +2,11 @@
 
 namespace CM_HlslShaderToy 
 {
+	struct Vertex
+	{
+		DirectX::XMFLOAT3 pos;
+	};
+
 	class ShaderToyWindow;
 	class Renderer 
 	{
@@ -12,7 +17,7 @@ namespace CM_HlslShaderToy
 		
 		void Render();
 		void Cleanup();
-		void WaitForPreviousFrame();
+		void WaitForPreviousFrame(bool incrementFenceValue = true);
 
 		bool IsInitialized() { return m_isInitialized; }
 
@@ -25,12 +30,14 @@ namespace CM_HlslShaderToy
 		bool CreateRTVs();
 		bool CreateCommandList();
 		bool CreateFences();
+		bool PrepareShaderPreviewResources();
 
 		//Render
 		void UpdatePipeline();
 
 	private: // Owned members
 		static const int m_frameBufferCount = 3;
+		const DXGI_FORMAT m_rtvFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
 
 		ComPtr<ID3D12Device> m_pDevice;
 		ComPtr<ID3D12CommandQueue> m_pCommandQueue;
@@ -50,6 +57,13 @@ namespace CM_HlslShaderToy
 		UINT m_height = 600;
 
 		bool m_isInitialized = false;
+
+		ComPtr<ID3D12PipelineState> m_pPSO;
+		ComPtr<ID3D12RootSignature> m_pRootSig;
+		D3D12_VIEWPORT m_viewport;
+		D3D12_RECT m_scissorRect;
+		ComPtr<ID3D12Resource> m_pVertexBuffer;
+		D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
 
 		// temporary way of checking that render thread is working correctly
 		bool increasing = true;
