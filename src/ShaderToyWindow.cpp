@@ -151,8 +151,6 @@ LRESULT CALLBACK ShaderToyWindow::WndProc(HWND hWnd, UINT message, WPARAM wParam
     switch (message)
     {
     case WM_DESTROY:
-        m_hwnd.reset();
-        m_pRenderer->Cleanup();
         break;
     
     case WM_PAINT:
