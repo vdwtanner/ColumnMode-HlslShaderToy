@@ -210,52 +210,15 @@ bool Renderer::PrepareShaderPreviewResources()
 	BAIL_ON_FAIL(D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, nullptr), L"Failed to serialize RootSignature");
 	BAIL_ON_FAIL(m_pDevice->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&m_pRootSig)), L"Failed to create RootSignature");
 
-	//Vertex Shader loaded from BuiltIn
-	D3D12_SHADER_BYTECODE vsByteCode = {};
-	vsByteCode.BytecodeLength = sizeof(g_VS_ScreenSpacePassthrough);
-	vsByteCode.pShaderBytecode = g_VS_ScreenSpacePassthrough;
-
-	//TODO: Pixel Shader loaded from plugin provided by user
-	D3D12_SHADER_BYTECODE psByteCode = {};
-	psByteCode.BytecodeLength = sizeof(g_PS_Magenta);
-	psByteCode.pShaderBytecode = g_PS_Magenta;
-
-	//Create Input Layout
-	D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
-	{
-		{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0}
-	};
-	D3D12_INPUT_LAYOUT_DESC inputLayoutDesc = {};
-	inputLayoutDesc.NumElements = 1;
-	inputLayoutDesc.pInputElementDescs = inputElementDescs;
-
-	//Create PSO
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
-	psoDesc.InputLayout = inputLayoutDesc;
-	psoDesc.pRootSignature = m_pRootSig.Get();
-	psoDesc.VS = vsByteCode;
-	psoDesc.PS = psByteCode;
-	psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-	psoDesc.NumRenderTargets = 1;
-	psoDesc.RTVFormats[0] = m_rtvFormat;
-	psoDesc.SampleDesc = { 1 /*count*/,0 /*quality*/};
-	psoDesc.SampleMask = 0xffffffff; // point sample
-	psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-	psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-
-	BAIL_ON_FAIL(m_pDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pPSO)), L"Failed to create PSO");
+	//Generate a PSO using the default pixelShader
+	SILENT_RETURN_FALSE(UpdatePso());
 
 	// Create VertexBuffer
 
-	Vertex verts[] /*= {
-		{{ -1.0f, -1.0f, .5f}},
-		{{ 1.0f, -1.0f, .5f}},
-		{{ -1.0f, 1.0f, .5f}}
-	};*/
-		= {
-		{ { 0.0f, 0.5f, 0.5f } },
-		{ { 0.5f, -0.5f, 0.5f } },
-		{ { -0.5f, -0.5f, 0.5f } },
+	Vertex verts[] = {
+		{{ -1.0f, 1.0f, .5f}},
+		{{ 1.0f, 1.0f, .5f}},
+		{{ -1.0f, -1.0f, .5f}}
 	};
 	size_t vertsSize = sizeof(verts);
 
@@ -324,6 +287,72 @@ bool Renderer::PrepareShaderPreviewResources()
 	//Wait for upload to complete before freeing upload heap
 	WaitForPreviousFrame(false);
 
+	return true;
+}
+
+bool Renderer::UpdatePso(IDxcBlob* pixelShader)
+{
+	assert(m_pDevice != nullptr);
+	assert(m_pRootSig != nullptr);
+
+	//Vertex Shader loaded from BuiltIn
+	D3D12_SHADER_BYTECODE vsByteCode = {};
+	vsByteCode.BytecodeLength = sizeof(g_VS_ScreenSpacePassthrough);
+	vsByteCode.pShaderBytecode = g_VS_ScreenSpacePassthrough;
+
+	// Pixel Shader provided by user or default shader
+	D3D12_SHADER_BYTECODE psByteCode = {};
+	if (pixelShader)
+	{
+		psByteCode.BytecodeLength = pixelShader->GetBufferSize();
+		psByteCode.pShaderBytecode = pixelShader->GetBufferPointer();
+	}
+	else
+	{
+		psByteCode.BytecodeLength = sizeof(g_PS_Magenta);
+		psByteCode.pShaderBytecode = g_PS_Magenta;
+	}
+
+	//Create Input Layout
+	D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
+	{
+		{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0}
+	};
+	D3D12_INPUT_LAYOUT_DESC inputLayoutDesc = {};
+	inputLayoutDesc.NumElements = 1;
+	inputLayoutDesc.pInputElementDescs = inputElementDescs;
+
+	//Create PSO
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+	psoDesc.InputLayout = inputLayoutDesc;
+	psoDesc.pRootSignature = m_pRootSig.Get();
+	psoDesc.VS = vsByteCode;
+	psoDesc.PS = psByteCode;
+	psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	psoDesc.NumRenderTargets = 1;
+	psoDesc.RTVFormats[0] = m_rtvFormat;
+	psoDesc.SampleDesc = { 1 /*count*/,0 /*quality*/ };
+	psoDesc.SampleMask = 0xffffffff; // point sample
+	psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+
+	if (m_pPSO != nullptr)
+	{
+		m_pendingFreeList[m_frameIndex].push_back(ComPtr<IUnknown>(m_pPSO.Detach()));
+	}
+
+	BAIL_ON_FAIL(m_pDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pPSO)), L"Failed to create PSO");
+
+	return true;
+}
+
+bool Renderer::TryUpdatePixelShader(IDxcBlob* shader)
+{
+	if (!UpdatePso(shader))
+	{
+		UpdatePso();
+		return false;
+	}
 	return true;
 }
 
@@ -446,6 +475,8 @@ void Renderer::WaitForPreviousFrame(bool incrementFenceValue)
 		// Idle until we get the signal to continue
 		WaitForSingleObject(m_fenceEvent, INFINITE);
 	}
+
+	m_pendingFreeList[m_frameIndex].clear();
 
 	if (incrementFenceValue)
 	{

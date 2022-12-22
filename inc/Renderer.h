@@ -21,6 +21,8 @@ namespace CM_HlslShaderToy
 
 		bool IsInitialized() { return m_isInitialized; }
 
+		bool TryUpdatePixelShader(IDxcBlob* shader);
+
 		~Renderer();
 
 	private:
@@ -34,6 +36,8 @@ namespace CM_HlslShaderToy
 
 		//Render
 		void UpdatePipeline();
+
+		bool UpdatePso(IDxcBlob* pixelShader = nullptr);
 
 	private: // Owned members
 		static const int m_frameBufferCount = 3;
@@ -68,6 +72,8 @@ namespace CM_HlslShaderToy
 		// temporary way of checking that render thread is working correctly
 		bool increasing = true;
 		float blue = 0.0f;
+
+		std::vector<ComPtr<IUnknown>> m_pendingFreeList[m_frameBufferCount];
 
 	private: // handles to pointers owned elsewhere
 		ShaderToyWindow* h_pShaderToyWindow;

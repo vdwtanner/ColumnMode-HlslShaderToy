@@ -8,7 +8,7 @@ Plugin::Plugin(ColumnMode::OpenPluginArgs* args)
 	memcpy(&m_callbacks, args->pCallbacks, sizeof(ColumnMode::OpenPluginArgs));
 	args->hPlugin = this;
 	args->pPluginFuncs->pfnOnOpen = OnOpen;
-	//args->pPluginFuncs->pfnOnSave = OnSave;
+	args->pPluginFuncs->pfnOnSave = OnSave;
 	args->pPluginFuncs->pfnOnSaveAs = OnSaveAs;
 	args->pPluginFuncs->pfnOnLoadCompleted = OnLoadCompleted;
 
@@ -33,7 +33,9 @@ HRESULT Plugin::OnOpen(HANDLE handle, LPCWSTR filepath)
 
 HRESULT Plugin::OnSave(HANDLE handle, LPCWSTR filepath)
 {
-	return E_NOTIMPL;
+	Plugin* pThis = reinterpret_cast<Plugin*>(handle);
+	pThis->m_pShaderToyWindow->TryUpdatePixelShaderFile(filepath);
+	return S_OK;
 }
 
 HRESULT Plugin::OnSaveAs(HANDLE handle, LPCWSTR filepath)
@@ -74,7 +76,14 @@ HRESULT Plugin::HandleFileChange(LPCWSTR filepath)
 	if (response == IDYES)
 	{
 		m_pShaderToyWindow->SetActiveFilepath(path);
-		if (!m_pShaderToyWindow->Show()) { return E_FAIL; }
+		if (!m_pShaderToyWindow->Show()) 
+		{ 
+			return E_FAIL;
+		}
+		else
+		{
+			m_pShaderToyWindow->TryUpdatePixelShaderFile(filepath);
+		}
 	}
 	return S_OK;
 }

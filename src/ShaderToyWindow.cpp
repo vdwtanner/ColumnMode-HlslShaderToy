@@ -19,6 +19,7 @@ ShaderToyWindow::ShaderToyWindow(Plugin* plugin) : m_plugin(plugin)
 {
     m_path.clear();
     m_pRenderer = std::make_unique<Renderer>(this);
+    m_pShaderCompiler = std::make_unique<ShaderCompiler>();
 }
 
 ShaderToyWindow::~ShaderToyWindow()
@@ -56,6 +57,18 @@ void ShaderToyWindow::SetActiveFilepath(std::filesystem::path path)
     isNewFile = true;
 }
 
+bool ShaderToyWindow::TryUpdatePixelShaderFile(LPCWSTR filepath)
+{
+    IDxcBlob* shader;
+    ComPtr<ID3DBlob> errorBuffer;
+    if (m_pShaderCompiler->CompilePixelShader(filepath, &shader))
+    {
+        std::lock_guard lock(m_newShaderMutex);
+        m_newPixelShader.emplace(ComPtr<IDxcBlob>(shader));
+        return true;
+    }
+    return false;
+}
 
 bool ShaderToyWindow::Show()
 {
@@ -115,9 +128,26 @@ void ShaderToyWindow::RenderLoop()
 {
     while (!m_shutdownRequested)
     {
-        // Take the mutex so there are no interuptions while we render this frame
-        std::lock_guard<std::mutex> renderLock(m_renderMutex);
-        m_pRenderer->Render();
+        std::unique_lock shaderUpdateLock(m_newShaderMutex, std::defer_lock);
+        if (shaderUpdateLock.try_lock())
+        {
+            if (m_newPixelShader.has_value())
+            {
+                if (!m_pRenderer->TryUpdatePixelShader(m_newPixelShader->Get()))
+                {
+                    MessageBox(NULL, L"Error setting the new pixel shader :(", L"ERROR", MB_OK);
+                }
+
+                //now wipe it out and free the memory again
+                m_newPixelShader.reset();
+            }
+            shaderUpdateLock.unlock();
+        }
+        {
+            // Take the mutex so there are no interuptions while we render this frame
+            std::lock_guard<std::mutex> renderLock(m_renderMutex);
+            m_pRenderer->Render();
+        }   
     }
 }
 

@@ -19,6 +19,7 @@ macro (compile_shaders)
             OUTPUT ${GENERATED_DIR}/Shaders/${FILE_WE}.h
             COMMAND dxc.exe -nologo -E ${ENTRY_POINT} -T ${TARGET_PROFILE} -Zs -Fh ${GENERATED_DIR}/Shaders/${FILE_WE}.h ${FILE} -Vn g_${FILE_WE}
             COMMAND ${CMAKE_COMMAND} -E echo "Compiling ${COMPILE_SHADERS_SHADER_TYPE}: ${FILE}"
+            COMMAND ${CMAKE_COMMAND} -E echo "dxc.exe -nologo -E ${ENTRY_POINT} -T ${TARGET_PROFILE} -Zs -Fh ${GENERATED_DIR}/Shaders/${FILE_WE}.h ${FILE} -Vn g_${FILE_WE}"
             MAIN_DEPENDENCY ${FILE}
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
             VERBATIM)

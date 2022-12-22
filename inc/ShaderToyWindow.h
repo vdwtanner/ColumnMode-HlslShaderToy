@@ -10,6 +10,7 @@ namespace CM_HlslShaderToy
 		~ShaderToyWindow();
 		HRESULT Init();
 		void SetActiveFilepath(std::filesystem::path path);
+		bool TryUpdatePixelShaderFile(LPCWSTR filepath);
 		bool Show();
 		
 		bool TryGetHwnd(_Out_ HWND& pHwnd);
@@ -30,9 +31,15 @@ namespace CM_HlslShaderToy
 		std::optional<HWND> m_hwnd;
 		std::filesystem::path m_path;
 		bool isNewFile = false;
+
 		std::unique_ptr<Renderer> m_pRenderer;
+		std::unique_ptr<ShaderCompiler> m_pShaderCompiler;
+
 		std::thread* m_pRenderThread;
 		std::mutex m_renderMutex;
+
+		std::optional<ComPtr<IDxcBlob>> m_newPixelShader;
+		std::mutex m_newShaderMutex;
 
 		bool m_shutdownRequested = false;
 	};
