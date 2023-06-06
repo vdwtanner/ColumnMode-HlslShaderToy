@@ -6,10 +6,11 @@ namespace CM_HlslShaderToy
 	{
 	public:
 		ShaderCompiler();
-		bool CompilePixelShader(LPCWSTR filepath, IDxcBlob** ppShaderOut);
+		bool CompilePixelShaderFromFile(LPCWSTR filepath, IDxcBlob** ppShaderOut);
+		bool CompilePixelShaderFromText(size_t numChars, LPCWSTR pText, LPCWSTR filename, IDxcBlob** ppShaderOut);
 
 	private:
-		bool CompileShader(size_t numArgs, LPCWSTR* pszArgs, IDxcBlob** ppShaderOut);
+		bool CompileShader(const DxcBuffer& sourceBuffer, size_t numArgs, LPCWSTR* pszArgs, IDxcBlob** ppShaderOut);
 
 	private:
 		ComPtr<IDxcUtils> pUtils;

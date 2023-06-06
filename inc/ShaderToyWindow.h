@@ -11,6 +11,7 @@ namespace CM_HlslShaderToy
 		HRESULT Init();
 		void SetActiveFilepath(std::filesystem::path path);
 		bool TryUpdatePixelShaderFile(LPCWSTR filepath);
+		bool TryUpdatePixelShaderText(const size_t numChars, LPCWSTR shaderText);
 		bool Show();
 		
 		bool TryGetHwnd(_Out_ HWND& pHwnd);

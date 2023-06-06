@@ -12,6 +12,11 @@ Plugin::Plugin(ColumnMode::OpenPluginArgs* args)
 	args->pPluginFuncs->pfnOnSaveAs = OnSaveAs;
 	args->pPluginFuncs->pfnOnLoadCompleted = OnLoadCompleted;
 
+	if (args->apiVersion >= 2)
+	{
+		args->pPluginFuncs->pfnOnTypingComplete = OnTypingCompleted;
+	}
+
 	m_pShaderToyWindow = new ShaderToyWindow(this);
 }
 
@@ -34,7 +39,10 @@ HRESULT Plugin::OnOpen(HANDLE handle, LPCWSTR filepath)
 HRESULT Plugin::OnSave(HANDLE handle, LPCWSTR filepath)
 {
 	Plugin* pThis = reinterpret_cast<Plugin*>(handle);
-	pThis->m_pShaderToyWindow->TryUpdatePixelShaderFile(filepath);
+	if (pThis->currentFileIsHlsl)
+	{
+		pThis->m_pShaderToyWindow->TryUpdatePixelShaderFile(filepath);
+	}
 	return S_OK;
 }
 
@@ -50,13 +58,23 @@ HRESULT Plugin::OnLoadCompleted(HANDLE handle)
 	return pThis->Init();
 }
 
-HRESULT Plugin::HandleFileChange(LPCWSTR filepath)
+HRESULT CM_HlslShaderToy::Plugin::OnTypingCompleted(HANDLE handle, const size_t numChars, const WCHAR* pAllText)
+{
+	Plugin* pThis = reinterpret_cast<Plugin*>(handle);
+	if (pThis->currentFileIsHlsl)
+	{
+		pThis->m_pShaderToyWindow->TryUpdatePixelShaderText(numChars, pAllText);
+	}
+	return E_NOTIMPL;
+}
+
+bool Plugin::CheckIfFileValidForPlugin(LPCWSTR filepath)
 {
 	std::filesystem::path path;
 	path.assign(filepath);
 
 	auto ext = path.extension();
-	LPCWSTR validExtensions[] = { L".hlsl"};
+	LPCWSTR validExtensions[] = { L".hlsl" };
 	bool valid = false;
 	for (auto extension : validExtensions)
 	{
@@ -66,7 +84,16 @@ HRESULT Plugin::HandleFileChange(LPCWSTR filepath)
 			break;
 		}
 	}
-	if (!valid)
+	return valid;
+}
+
+HRESULT Plugin::HandleFileChange(LPCWSTR filepath)
+{
+	std::filesystem::path path;
+	path.assign(filepath);
+
+	currentFileIsHlsl = CheckIfFileValidForPlugin(filepath);
+	if (!currentFileIsHlsl)
 	{
 		return S_FALSE;
 	}

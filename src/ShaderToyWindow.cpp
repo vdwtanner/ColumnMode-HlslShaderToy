@@ -61,7 +61,20 @@ bool ShaderToyWindow::TryUpdatePixelShaderFile(LPCWSTR filepath)
 {
     IDxcBlob* shader;
     ComPtr<ID3DBlob> errorBuffer;
-    if (m_pShaderCompiler->CompilePixelShader(filepath, &shader))
+    if (m_pShaderCompiler->CompilePixelShaderFromFile(filepath, &shader))
+    {
+        std::lock_guard lock(m_newShaderMutex);
+        m_newPixelShader.emplace(ComPtr<IDxcBlob>(shader));
+        return true;
+    }
+    return false;
+}
+
+bool ShaderToyWindow::TryUpdatePixelShaderText(const size_t numChars, LPCWSTR shaderText)
+{
+    IDxcBlob* shader;
+    ComPtr<ID3DBlob> errorBuffer;
+    if (m_pShaderCompiler->CompilePixelShaderFromText(numChars, shaderText, m_path.c_str(), &shader))
     {
         std::lock_guard lock(m_newShaderMutex);
         m_newPixelShader.emplace(ComPtr<IDxcBlob>(shader));
