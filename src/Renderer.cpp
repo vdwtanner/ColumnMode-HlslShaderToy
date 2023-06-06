@@ -455,7 +455,7 @@ void Renderer::Cleanup()
 	{
 		m_pFences[i].Reset();
 		m_pCommandAllocators[i].Reset();
-		m_pRenderTargets[i].Reset();
+		m_pRenderTargets[i].Detach(); //looks like these maybe shouldn't be ComPtrs? Reset here causes a crash when we try to free the SwapChain because it also has a reference to them that it tries to clear.
 	}
 	m_pRtvDescHeap.Reset();
 	m_pCommandQueue.Reset();
