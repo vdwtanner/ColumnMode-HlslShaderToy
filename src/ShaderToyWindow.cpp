@@ -22,7 +22,7 @@ ShaderToyWindow::ShaderToyWindow(Plugin* plugin) : m_plugin(plugin)
     m_pRenderer = std::make_unique<Renderer>(this);
     m_pShaderCompiler = std::make_unique<ShaderCompiler>();
     m_pTimer = std::make_unique<DX::StepTimer>(); //throws
-    m_pTimer->SetFixedTimeStep(true);
+    //m_pTimer->SetFixedTimeStep(true);
     m_pResourceManager = std::make_unique<ResourceManager>();
 }
 
@@ -227,7 +227,7 @@ LRESULT CALLBACK ShaderToyWindow::WndProc(HWND hWnd, UINT message, WPARAM wParam
         UINT width = LOWORD(lParam);
         UINT height = HIWORD(lParam);
         OnResize(width, height);
-        return 0;
+        break;
     }
 
     return DefWindowProc(hWnd, message, wParam, lParam);

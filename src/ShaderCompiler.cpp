@@ -40,8 +40,16 @@ bool ShaderCompiler::CompilePixelShaderFromFile(LPCWSTR filepath, IDxcBlob** ppS
     Source.Ptr = pSource->GetBufferPointer();
     Source.Size = pSource->GetBufferSize();
     Source.Encoding = DXC_CP_ACP; // Assume BOM says UTF8 or UTF16 or this is ANSI text.
+    ComPtr<IDxcBlobUtf8> pErrors = nullptr;
     
-    return CompileShader(Source, _countof(pszArgs), pszArgs, ppShaderOut);
+    bool success = CompileShader(Source, _countof(pszArgs), pszArgs, ppShaderOut, &pErrors);
+
+    if (pErrors != nullptr && pErrors->GetStringLength() != 0)
+    {
+        MessageBox(NULL, from_utf8(pErrors->GetStringPointer()).c_str(), L"Warnings and Errors", MB_OK);
+    }
+
+    return success;
 }
 
 bool ShaderCompiler::CompilePixelShaderFromText(size_t numChars, LPCWSTR pText, LPCWSTR filename, IDxcBlob** ppShaderOut)
@@ -68,11 +76,13 @@ bool ShaderCompiler::CompilePixelShaderFromText(size_t numChars, LPCWSTR pText, 
     Source.Ptr = pText;
     Source.Size = numChars*sizeof(WCHAR);
     Source.Encoding = DXC_CP_UTF16; // Assume BOM says UTF8 or UTF16 or this is ANSI text.
+    ComPtr<IDxcBlobUtf8> pErrors = nullptr;
 
-    return CompileShader(Source, _countof(pszArgs), pszArgs, ppShaderOut);
+    //TODO: Display errors in a non-intrusive way
+    return CompileShader(Source, _countof(pszArgs), pszArgs, ppShaderOut, &pErrors);
 }
 
-bool ShaderCompiler::CompileShader(const DxcBuffer& sourceBuffer, size_t numArgs, LPCWSTR* pszArgs, IDxcBlob** ppShaderOut)
+bool ShaderCompiler::CompileShader(const DxcBuffer& sourceBuffer, size_t numArgs, LPCWSTR* pszArgs, IDxcBlob** ppShaderOut, IDxcBlobUtf8** ppErrors)
 {
     // Compile it with specified arguments.
     ComPtr<IDxcResult> pResults;
@@ -84,16 +94,12 @@ bool ShaderCompiler::CompileShader(const DxcBuffer& sourceBuffer, size_t numArgs
         IID_PPV_ARGS(&pResults) // Compiler output status, buffer, and errors.
     );
 
-    // Print errors if present.
-    ComPtr<IDxcBlobUtf8> pErrors = nullptr;
-    pResults->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&pErrors), nullptr);
+    // Get errors if present.
+    pResults->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(ppErrors), nullptr);
     // Note that d3dcompiler would return null if no errors or warnings are present.
     // IDxcCompiler3::Compile will always return an error buffer, but its length
     // will be zero if there are no warnings or errors.
-    if (pErrors != nullptr && pErrors->GetStringLength() != 0)
-    {
-        MessageBox(NULL, from_utf8(pErrors->GetStringPointer()).c_str(), L"Warnings and Errors", MB_OK);
-    }
+    
 
     //Quit if failed
     HRESULT hrStatus;

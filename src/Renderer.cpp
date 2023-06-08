@@ -365,7 +365,7 @@ void Renderer::UpdateResources()
 	//Update resource data
 	auto& resourceData = h_pShaderToyWindow->GetResourceManager().GetData();
 	{
-		auto lockedData = resourceData.GetLocked();
+		auto lockedData = resourceData.GetLocked();		
 		if (lockedData->GetDirtyBits().constants)
 		{
 			m_pCommandList->SetGraphicsRoot32BitConstants(ROOT_CONSTANT_INDEX, 2, lockedData->GetConstantsPtr(), 0);
