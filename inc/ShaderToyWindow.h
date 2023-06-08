@@ -1,5 +1,10 @@
 #pragma once
 
+namespace DX
+{
+	class StepTimer;
+}
+
 namespace CM_HlslShaderToy
 {
 	class Plugin;
@@ -13,6 +18,7 @@ namespace CM_HlslShaderToy
 		bool TryUpdatePixelShaderFile(LPCWSTR filepath);
 		bool TryUpdatePixelShaderText(const size_t numChars, LPCWSTR shaderText);
 		bool Show();
+		ResourceManager& GetResourceManager() { return *m_pResourceManager; }
 		
 		bool TryGetHwnd(_Out_ HWND& pHwnd);
 
@@ -43,5 +49,8 @@ namespace CM_HlslShaderToy
 		std::mutex m_newShaderMutex;
 
 		bool m_shutdownRequested = false;
+		std::unique_ptr<DX::StepTimer> m_pTimer;
+		std::unique_ptr<ResourceManager> m_pResourceManager;
+
 	};
 }

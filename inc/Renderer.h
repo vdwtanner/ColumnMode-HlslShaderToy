@@ -13,7 +13,7 @@ namespace CM_HlslShaderToy
 	public:
 		Renderer(_In_ ShaderToyWindow* pShaderToyWindow);
 		bool Init();
-		void Update();
+		
 		
 		void Render();
 		void Cleanup();
@@ -35,12 +35,14 @@ namespace CM_HlslShaderToy
 		bool PrepareShaderPreviewResources();
 
 		//Render
+		void UpdateResources();
 		void UpdatePipeline();
 
 		bool UpdatePso(IDxcBlob* pixelShader = nullptr);
 
 	private: // Owned members
 		static const int m_frameBufferCount = 3;
+		static const UINT ROOT_CONSTANT_INDEX = 0;
 		const DXGI_FORMAT m_rtvFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
 
 		ComPtr<ID3D12Device> m_pDevice;

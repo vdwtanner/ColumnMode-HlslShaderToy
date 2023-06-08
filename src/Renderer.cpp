@@ -203,11 +203,13 @@ bool Renderer::PrepareShaderPreviewResources()
 	//TODO - refactor preview viewport rendering to another class
 
 	// First create RootSig
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc;
-	rootSigDesc.Init(0, nullptr, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+	CD3DX12_ROOT_PARAMETER1 RP[1];
+	RP[0].InitAsConstants(2, 0); // Time, deltaTime @ b0
+
+	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSigDesc(_countof(RP), RP, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 	ComPtr<ID3DBlob> signature;
-	BAIL_ON_FAIL(D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, nullptr), L"Failed to serialize RootSignature");
+	BAIL_ON_FAIL(D3D12SerializeVersionedRootSignature(&rootSigDesc, &signature, nullptr), L"Failed to serialize RootSignature");
 	BAIL_ON_FAIL(m_pDevice->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&m_pRootSig)), L"Failed to create RootSignature");
 
 	//Generate a PSO using the default pixelShader
@@ -356,8 +358,22 @@ bool Renderer::TryUpdatePixelShader(IDxcBlob* shader)
 	return true;
 }
 
-void Renderer::Update()
+void Renderer::UpdateResources()
 {
+	// make sure root sig is set
+	m_pCommandList->SetGraphicsRootSignature(m_pRootSig.Get());
+	//Update resource data
+	auto& resourceData = h_pShaderToyWindow->GetResourceManager().GetData();
+	{
+		auto lockedData = resourceData.GetLocked();
+		if (lockedData->GetDirtyBits().constants)
+		{
+			m_pCommandList->SetGraphicsRoot32BitConstants(ROOT_CONSTANT_INDEX, 2, lockedData->GetConstantsPtr(), 0);
+		}
+		lockedData->ClearDirtyBits();
+	}
+	
+
 	//TODO: Draw the ShaderToy quad
 
 	//TODO: UI elements? especially since we don't get GDI bc d3d12
@@ -367,7 +383,13 @@ void Renderer::Render()
 {
 	// get the new frame index from the swap chain
 	m_frameIndex = m_pSwapChain->GetCurrentBackBufferIndex();
+	// Let the GPU finish doing work with this frame's commandAllocator before we reset it
+	WaitForPreviousFrame();
+	VerifyHR(m_pCommandAllocators[m_frameIndex]->Reset());
+	// now we need to make sure that the commandList is reset and using the current allocator
+	VerifyHR(m_pCommandList->Reset(m_pCommandAllocators[m_frameIndex].Get(), m_pPSO.Get()));
 
+	UpdateResources();
 	UpdatePipeline();
 
 	// "Build" an array of command lists sorted in the order we want to render
@@ -381,13 +403,7 @@ void Renderer::Render()
 
 void Renderer::UpdatePipeline()
 {
-	// Let the GPU finish doing work with this frame's commandAllocator before we reset it
-	WaitForPreviousFrame();
-
-	VerifyHR(m_pCommandAllocators[m_frameIndex]->Reset());
-
-	// now we need to make sure that the commandList is reset and using the current allocator
-	VerifyHR(m_pCommandList->Reset(m_pCommandAllocators[m_frameIndex].Get(), m_pPSO.Get()));
+	
 
 	// Transition our RTVs, and clear the new RTV
 
@@ -409,7 +425,7 @@ void Renderer::UpdatePipeline()
 
 	//After Clearing we can draw
 	//m_pCommandList->SetPipelineState(m_pPSO.Get()); // don't need to do this since we set it as the initial PSO when resetting
-	m_pCommandList->SetGraphicsRootSignature(m_pRootSig.Get());
+	
 	m_pCommandList->RSSetViewports(1, &m_viewport);
 	m_pCommandList->RSSetScissorRects(1, &m_scissorRect);
 	m_pCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);

@@ -1,4 +1,5 @@
 #include "pch.h"
+#include "StepTimer.h"
 
 using namespace CM_HlslShaderToy;
 
@@ -20,6 +21,9 @@ ShaderToyWindow::ShaderToyWindow(Plugin* plugin) : m_plugin(plugin)
     m_path.clear();
     m_pRenderer = std::make_unique<Renderer>(this);
     m_pShaderCompiler = std::make_unique<ShaderCompiler>();
+    m_pTimer = std::make_unique<DX::StepTimer>(); //throws
+    m_pTimer->SetFixedTimeStep(true);
+    m_pResourceManager = std::make_unique<ResourceManager>();
 }
 
 ShaderToyWindow::~ShaderToyWindow()
@@ -141,6 +145,15 @@ void ShaderToyWindow::RenderLoop()
 {
     while (!m_shutdownRequested)
     {
+        m_pTimer->Tick([&](){
+            // "update" step where we set ResourceData
+            auto& data = m_pResourceManager->GetData();
+            auto lockedData = data.GetLocked();
+            lockedData->SetConstants(m_pTimer->GetTotalSeconds(), m_pTimer->GetElapsedSeconds());
+        });
+
+
+
         std::unique_lock shaderUpdateLock(m_newShaderMutex, std::defer_lock);
         if (shaderUpdateLock.try_lock())
         {

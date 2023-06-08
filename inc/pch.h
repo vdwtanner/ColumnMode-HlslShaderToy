@@ -22,8 +22,11 @@ using namespace ::Microsoft::WRL;
 #include <dxcapi.h>
 #include "directx/d3dx12.h"
 
+#include "util.h"
 #include "ColumnModePluginAPI.h"
 #include "ShaderCompiler.h"
+
+#include "ResourceManager.h"
 #include "Renderer.h"
 #include "ShaderToyWindow.h"
 #include "Plugin.h"
