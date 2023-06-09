@@ -216,10 +216,13 @@ bool Renderer::PrepareShaderPreviewResources()
 	SILENT_RETURN_FALSE(UpdatePso());
 
 	// Create VertexBuffer
-
+	// verts in NDC
 	Vertex verts[] = {
 		{{ -1.0f, 1.0f, .5f}},
 		{{ 1.0f, 1.0f, .5f}},
+		{{ -1.0f, -1.0f, .5f}},
+		{{ 1.0f, 1.0f, .5f}},
+		{{ 1.0f, -1.0f, .5f}},
 		{{ -1.0f, -1.0f, .5f}}
 	};
 	size_t vertsSize = sizeof(verts);
@@ -430,7 +433,7 @@ void Renderer::UpdatePipeline()
 	m_pCommandList->RSSetScissorRects(1, &m_scissorRect);
 	m_pCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	m_pCommandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
-	m_pCommandList->DrawInstanced(3, 1, 0, 0);
+	m_pCommandList->DrawInstanced(6, 1, 0, 0);
 
 	// Now transition back to present so we can show off the goods
 	auto t2 = CD3DX12_RESOURCE_BARRIER::Transition(
