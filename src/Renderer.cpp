@@ -94,7 +94,7 @@ bool Renderer::CreateSwapChain()
 	sampleDesc.Quality = 0;
 
 	HWND hwnd;
-	MESSAGE_RETURN_FALSE(h_pShaderToyWindow->TryGetHwnd(hwnd), L"Can't create a swapchain without a valid HWND");
+	MESSAGE_RETURN_FALSE(h_pShaderToyWindow->TryGetD3D12Hwnd(hwnd), L"Can't create a swapchain without a valid HWND");
 
 	//DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};

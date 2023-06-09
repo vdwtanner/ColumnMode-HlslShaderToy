@@ -24,3 +24,11 @@ public:
     template <typename... Args> LockedContainer(Args&&... args) : m_Obj(std::forward<Args>(args)...) {}
     LockedAccess GetLocked() { return LockedAccess(m_mutex, m_Obj); }
 };
+
+template<UINT bufferSize = 256, typename... Args>
+int MessageBoxHelper_FormattedBody(UINT messageBoxFlags, LPCWSTR title, LPCWSTR formatString, Args... args)
+{
+    WCHAR bodyBuff[bufferSize];
+    std::swprintf(bodyBuff, bufferSize, formatString, args...);
+    return MessageBox(NULL, bodyBuff, title, messageBoxFlags);
+}

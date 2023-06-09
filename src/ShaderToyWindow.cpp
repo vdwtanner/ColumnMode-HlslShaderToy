@@ -16,6 +16,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     return DefWindowProc(hWnd, message, wParam, lParam);
 }
 
+LRESULT CALLBACK WndProcD3D12(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    /*LONG_PTR ptr = GetWindowLongPtr(hWnd, GWLP_USERDATA);
+    if (ptr)
+    {
+        ShaderToyWindow* pThis = reinterpret_cast<ShaderToyWindow*>(ptr);
+        return pThis->WndProc(hWnd, message, wParam, lParam);
+    }*/
+
+    return DefWindowProc(hWnd, message, wParam, lParam);
+}
+
 ShaderToyWindow::ShaderToyWindow(Plugin* plugin) : m_plugin(plugin)
 {
     m_path.clear();
@@ -48,6 +60,16 @@ HRESULT ShaderToyWindow::Init()
     m_windowClassAtom = (*m_plugin->m_callbacks.pfnRegisterWindowClass)(windowClass);
 
     if (m_windowClassAtom == 0)
+    {
+        return E_FAIL;
+    }
+
+    WNDCLASS windowClassd3d12{};
+    windowClassd3d12.lpfnWndProc = ::WndProcD3D12;
+    windowClassd3d12.lpszClassName = L"CM_HlslShaderToy_D3D12Surface";
+    m_d3d12SurfaceAtom = (*m_plugin->m_callbacks.pfnRegisterWindowClass)(windowClassd3d12);
+
+    if (m_d3d12SurfaceAtom == 0)
     {
         return E_FAIL;
     }
@@ -106,14 +128,40 @@ bool ShaderToyWindow::EnsureWindowCreated()
         args.exWindowStyle = 0;
         args.windowClass = m_windowClassAtom;
         args.windowName = L"HLSL Shader Toy";
-        args.height = 500;
-        args.width = 500;
+        args.height = MIN_WINDOW_HEIGHT;
+        args.width = MIN_WINDOW_WIDTH;
 
         HWND hwnd = 0;
         if (SUCCEEDED((*m_plugin->m_callbacks.pfnOpenWindow)(args, &hwnd)))
         {
             m_hwnd.emplace(std::move(hwnd));
             SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)this);
+
+            RECT rect;
+            if (!GetWindowRect(hwnd, &rect))
+            {
+                MessageBoxHelper_FormattedBody(MB_ICONERROR | MB_OK, L"Error", L"Failed to fetch main window dimensions.");
+                return false;
+            }
+            //now create a child hwnd to host the d3d12 rendering
+            hwnd = CreateWindowEx(
+                0,
+                MAKEINTATOM(m_d3d12SurfaceAtom),
+                L"D3D12 Surface",
+                WS_CHILD | WS_VISIBLE | SS_OWNERDRAW | WS_BORDER,
+                0, 0,       //x,y
+                rect.right - rect.left, D3D12_SURFACE_HEIGHT,   //width, height
+                m_hwnd.value(),
+                m_childWindowIdFactory.GetNextId(),
+                NULL,
+                NULL);
+            if (hwnd == NULL)
+            {
+                DWORD err = GetLastError();
+                MessageBoxHelper_FormattedBody(MB_ICONERROR | MB_OK, L"Error", L"Failed to initialize D3D12 surface with error code: %d", err);
+                return false;
+            }
+            m_d3d12SurfaceHwnd.emplace(std::move(hwnd));
         }
 
         if (!m_pRenderer->Init())
@@ -136,6 +184,17 @@ bool ShaderToyWindow::ShaderToyWindow::TryGetHwnd(_Out_ HWND& pHwnd)
     if (m_hwnd.has_value())
     {
         pHwnd = m_hwnd.value();
+        return true;
+    }
+    return false;
+}
+
+bool ShaderToyWindow::ShaderToyWindow::TryGetD3D12Hwnd(_Out_ HWND& pHwnd)
+{
+    pHwnd = NULL;
+    if (m_d3d12SurfaceHwnd.has_value())
+    {
+        pHwnd = m_d3d12SurfaceHwnd.value();
         return true;
     }
     return false;
@@ -194,7 +253,8 @@ void ShaderToyWindow::UpdateWindowTitle(std::wstring message)
 
 void ShaderToyWindow::OnResize(UINT width, UINT height)
 {
-
+    m_windowDimensions.width = width;
+    m_windowDimensions.height = height;
 }
 
 LRESULT CALLBACK ShaderToyWindow::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -220,14 +280,32 @@ LRESULT CALLBACK ShaderToyWindow::WndProc(HWND hWnd, UINT message, WPARAM wParam
         }
         
         break;
-    
     case WM_PAINT:
-        break;
+    {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hWnd, &ps);
+
+        // All painting occurs here, between BeginPaint and EndPaint.
+        FillRect(hdc, &ps.rcPaint, (HBRUSH)(COLOR_WINDOW + 1));
+        EndPaint(hWnd, &ps);
+        return 0;
+    }
     case WM_SIZE:
+    {
         UINT width = LOWORD(lParam);
         UINT height = HIWORD(lParam);
         OnResize(width, height);
         break;
+    }
+        
+    case WM_GETMINMAXINFO:
+    {
+        LPMINMAXINFO lpMMI = (LPMINMAXINFO)lParam;
+        lpMMI->ptMinTrackSize.x = MIN_WINDOW_WIDTH;
+        lpMMI->ptMinTrackSize.y = MIN_WINDOW_HEIGHT;
+        break;
+    }
+        
     }
 
     return DefWindowProc(hWnd, message, wParam, lParam);
