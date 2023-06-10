@@ -15,11 +15,18 @@ namespace CM_HlslShaderToy
 		static HRESULT APIENTRY OnSaveAs(HANDLE, LPCWSTR);
 		static HRESULT APIENTRY OnLoadCompleted(HANDLE);
 
+		// API version >= 2
+		static HRESULT APIENTRY OnTypingCompleted(HANDLE, const size_t, const WCHAR*);
+
 	protected:
-		void HandleFileChange(LPCWSTR);
+		bool CheckIfFileValidForPlugin(LPCWSTR);
+		HRESULT HandleFileChange(LPCWSTR);
 
 	public:
 		ColumnMode::ColumnModeCallbacks m_callbacks;
 		ShaderToyWindow* m_pShaderToyWindow;
+
+	private:
+		bool currentFileIsHlsl = false;
 	};
 }
