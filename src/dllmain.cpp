@@ -9,6 +9,7 @@
 //#pragma comment (lib, "windowscodecs.lib")
 
 using namespace CM_HlslShaderToy;
+HMODULE hRichEdit = NULL;
 
 HRESULT APIENTRY OnShutdown(HANDLE handle)
 {
@@ -19,6 +20,11 @@ HRESULT APIENTRY OnShutdown(HANDLE handle)
 
 HRESULT WINAPI OpenColumnModePlugin(_Inout_ ColumnMode::OpenPluginArgs* args)
 {
+    if (hRichEdit == NULL)
+    {
+        hRichEdit = LoadLibrary(L"Msftedit.dll"); //Not next to plugin dll, so can't use the other approach
+        assert(hRichEdit != NULL);
+    }
     Plugin* p = new Plugin(args);
     args->pPluginFuncs->pfnOnShutdown = OnShutdown;
     return S_OK;
@@ -26,37 +32,51 @@ HRESULT WINAPI OpenColumnModePlugin(_Inout_ ColumnMode::OpenPluginArgs* args)
 
 HRESULT WINAPI QueryColumnModePluginDependencies(_Inout_ UINT* pCount, _Inout_opt_count_(*pCount) ColumnMode::PluginDependency* pDependencies)
 {
-    constexpr WCHAR dxilDll[] = L"dxil.dll";
-    constexpr UINT dxilDllLength = _countof(dxilDll);
+    std::wstring deps[] = { L"dxil.dll" };
+
     if (pDependencies == nullptr)
     {
         // First call sets the numder of runtime dependencies
-        *pCount = 1;
+        *pCount = _countof(deps);
         return S_OK;
     }
-    else if (*pCount != 1)
+    else if (*pCount != _countof(deps))
     {
         return E_INVALIDARG;
     }
 
     // now we know pDependencies is valid and pCount == 1
-    if (pDependencies[0].pName == nullptr)
+    bool returnSOK = false;
+    for (int i = 0; i < _countof(deps); i++)
     {
-        // second call sets the size of the dependency name
-        pDependencies[0].length = dxilDllLength;
+        if (pDependencies[i].pName == nullptr)
+        {
+            // second call sets the size of the dependency name
+
+            pDependencies[i].length = deps[i].length();
+            returnSOK = true;
+        }
+        else if (pDependencies[i].length != deps[i].length())
+        {
+            return E_INVALIDARG;
+        }
+
+        
+    }
+    if (returnSOK)
+    {
         return S_OK;
     }
-    else if (pDependencies[0].length != dxilDllLength)
-    {
-        return E_INVALIDARG;
-    }
 
-    // now we know that pDependencies[0].pName is valid and the correct size
-
-    if (memcpy_s(pDependencies[0].pName, pDependencies[0].length * sizeof(WCHAR), dxilDll, dxilDllLength * sizeof(WCHAR)) != 0)
+    for (int i = 0; i < _countof(deps); i++)
     {
-        return E_FAIL;
+        // now we know that pDependencies[i].pName is valid and the correct size
+        if (memcpy_s(pDependencies[i].pName, pDependencies[i].length * sizeof(WCHAR), deps[i].c_str(), deps[i].length() * sizeof(WCHAR)) != 0)
+        {
+            return E_FAIL;
+        }
     }
+    
 
     return S_OK;
 }

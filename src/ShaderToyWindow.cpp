@@ -87,11 +87,17 @@ bool ShaderToyWindow::TryUpdatePixelShaderFile(LPCWSTR filepath)
 {
     IDxcBlob* shader;
     ComPtr<ID3DBlob> errorBuffer;
-    if (m_pShaderCompiler->CompilePixelShaderFromFile(filepath, &shader))
+    ComPtr<IDxcBlobUtf8> pErrors = nullptr;
+    if (m_pShaderCompiler->CompilePixelShaderFromFile(filepath, &shader, &pErrors))
     {
         std::lock_guard lock(m_newShaderMutex);
         m_newPixelShader.emplace(ComPtr<IDxcBlob>(shader));
+        m_hWarningMessageTextArea->SetText(L"Compilation Successful.");
         return true;
+    }
+    else if (pErrors != nullptr)
+    {
+        m_hWarningMessageTextArea->SetText(from_utf8(pErrors->GetStringPointer()).c_str());
     }
     return false;
 }
@@ -100,11 +106,17 @@ bool ShaderToyWindow::TryUpdatePixelShaderText(const size_t numChars, LPCWSTR sh
 {
     IDxcBlob* shader;
     ComPtr<ID3DBlob> errorBuffer;
-    if (m_pShaderCompiler->CompilePixelShaderFromText(numChars, shaderText, m_path.c_str(), &shader))
+    ComPtr<IDxcBlobUtf8> pErrors = nullptr;
+    if (m_pShaderCompiler->CompilePixelShaderFromText(numChars, shaderText, m_path.c_str(), &shader, &pErrors))
     {
         std::lock_guard lock(m_newShaderMutex);
         m_newPixelShader.emplace(ComPtr<IDxcBlob>(shader));
+        m_hWarningMessageTextArea->SetText(L"Compilation Successful.");
         return true;
+    }
+    else if (pErrors != nullptr)
+    {   
+        m_hWarningMessageTextArea->SetText(from_utf8(pErrors->GetStringPointer()).c_str());
     }
     return false;
 }
@@ -130,6 +142,8 @@ bool ShaderToyWindow::EnsureWindowCreated()
         args.windowName = L"HLSL Shader Toy";
         args.height = MIN_WINDOW_HEIGHT;
         args.width = MIN_WINDOW_WIDTH;
+        m_windowDimensions.width = MIN_WINDOW_WIDTH;
+        m_windowDimensions.height = MIN_WINDOW_HEIGHT;
 
         HWND hwnd = 0;
         if (SUCCEEDED((*m_plugin->m_callbacks.pfnOpenWindow)(args, &hwnd)))
@@ -162,6 +176,8 @@ bool ShaderToyWindow::EnsureWindowCreated()
                 return false;
             }
             m_d3d12SurfaceHwnd.emplace(std::move(hwnd));
+
+            CreateResourceManagementUI();
         }
 
         if (!m_pRenderer->Init())
@@ -255,6 +271,31 @@ void ShaderToyWindow::OnResize(UINT width, UINT height)
 {
     m_windowDimensions.width = width;
     m_windowDimensions.height = height;
+
+    //TODO - resize d3d rect
+
+    auto rect = m_pVerticalLayout->GetRect();
+    rect.right = width-5;
+    rect.bottom = height;
+    m_pVerticalLayout->Reposition(&rect);
+}
+
+void ShaderToyWindow::CreateResourceManagementUI()
+{
+    RECT rect{};
+    rect.left = 5;
+    rect.right = m_windowDimensions.width-15;
+    rect.top = D3D12_SURFACE_HEIGHT + 10;
+    rect.bottom = m_windowDimensions.height;
+
+    m_pVerticalLayout = std::make_unique<UIVerticalLayout>(m_hwnd.value(), m_childWindowIdFactory.GetNextId(), rect);
+
+    HWND vlHwnd = m_pVerticalLayout->GetHwnd();
+    m_hWarningMessageTextArea = m_pVerticalLayout->AddElement(new UITextArea(vlHwnd, m_childWindowIdFactory.GetNextId()));
+    UIDimension textAreaDim{};
+    textAreaDim.width = 200;
+    textAreaDim.height = 100;
+    m_hWarningMessageTextArea->SetDesiredDimension(textAreaDim, LayoutFlags::FLEX_WIDTH);
 }
 
 LRESULT CALLBACK ShaderToyWindow::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)

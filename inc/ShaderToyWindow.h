@@ -45,6 +45,8 @@ namespace CM_HlslShaderToy
 		void UpdateWindowTitle(std::wstring message = L"");
 		void OnResize(UINT width, UINT height);
 
+		void CreateResourceManagementUI();
+
 	private: //variables
 		Plugin* m_plugin;
 		ATOM m_windowClassAtom;
@@ -74,6 +76,9 @@ namespace CM_HlslShaderToy
 		};
 		WindowDimension m_windowDimensions;
 		ChildWindowIdFactory m_childWindowIdFactory;
+
+		std::unique_ptr<UIVerticalLayout> m_pVerticalLayout;//valid after CreateResourceManagementUI and until the window is destroyed
+		UITextArea* m_hWarningMessageTextArea; //valid after CreateResourceManagementUI and until the window is destroyed
 
 	private: //consts
 		static const UINT MIN_WINDOW_WIDTH = 500;

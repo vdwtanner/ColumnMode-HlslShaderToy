@@ -28,6 +28,8 @@ using namespace ::Microsoft::WRL;
 
 #include "ResourceManager.h"
 #include "Renderer.h"
+#include "UIElements.h"
+#include "UILayouts.h"
 #include "ShaderToyWindow.h"
 #include "Plugin.h"
 

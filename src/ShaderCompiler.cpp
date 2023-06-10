@@ -13,7 +13,7 @@ ShaderCompiler::ShaderCompiler()
     pUtils->CreateDefaultIncludeHandler(&pIncludeHandler);
 }
 
-bool ShaderCompiler::CompilePixelShaderFromFile(LPCWSTR filepath, IDxcBlob** ppShaderOut)
+bool ShaderCompiler::CompilePixelShaderFromFile(LPCWSTR filepath, IDxcBlob** ppShaderOut, IDxcBlobUtf8** ppErrors)
 {
     //
     // COMMAND LINE:
@@ -40,19 +40,14 @@ bool ShaderCompiler::CompilePixelShaderFromFile(LPCWSTR filepath, IDxcBlob** ppS
     Source.Ptr = pSource->GetBufferPointer();
     Source.Size = pSource->GetBufferSize();
     Source.Encoding = DXC_CP_ACP; // Assume BOM says UTF8 or UTF16 or this is ANSI text.
-    ComPtr<IDxcBlobUtf8> pErrors = nullptr;
     
-    bool success = CompileShader(Source, _countof(pszArgs), pszArgs, ppShaderOut, &pErrors);
-
-    if (pErrors != nullptr && pErrors->GetStringLength() != 0)
-    {
-        MessageBox(NULL, from_utf8(pErrors->GetStringPointer()).c_str(), L"Warnings and Errors", MB_OK);
-    }
+    
+    bool success = CompileShader(Source, _countof(pszArgs), pszArgs, ppShaderOut, ppErrors);
 
     return success;
 }
 
-bool ShaderCompiler::CompilePixelShaderFromText(size_t numChars, LPCWSTR pText, LPCWSTR filename, IDxcBlob** ppShaderOut)
+bool ShaderCompiler::CompilePixelShaderFromText(size_t numChars, LPCWSTR pText, LPCWSTR filename, IDxcBlob** ppShaderOut, IDxcBlobUtf8** ppErrors)
 {
     //
     // COMMAND LINE:
@@ -76,10 +71,9 @@ bool ShaderCompiler::CompilePixelShaderFromText(size_t numChars, LPCWSTR pText, 
     Source.Ptr = pText;
     Source.Size = numChars*sizeof(WCHAR);
     Source.Encoding = DXC_CP_UTF16; // Assume BOM says UTF8 or UTF16 or this is ANSI text.
-    ComPtr<IDxcBlobUtf8> pErrors = nullptr;
 
     //TODO: Display errors in a non-intrusive way
-    return CompileShader(Source, _countof(pszArgs), pszArgs, ppShaderOut, &pErrors);
+    return CompileShader(Source, _countof(pszArgs), pszArgs, ppShaderOut, ppErrors);
 }
 
 bool ShaderCompiler::CompileShader(const DxcBuffer& sourceBuffer, size_t numArgs, LPCWSTR* pszArgs, IDxcBlob** ppShaderOut, IDxcBlobUtf8** ppErrors)
